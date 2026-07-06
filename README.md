@@ -81,6 +81,21 @@ The repository provides a `Makefile` wrapper to start the main GUI application:
 make run
 ```
 
+### Raspberry Pi Setup
+
+If you are running the application on a Raspberry Pi:
+1. Run the system setup script to install necessary GLES, Mesa, SDL2, and FFmpeg dependencies:
+   ```bash
+   make setup
+   ```
+2. The setup script will automatically generate:
+   - `run_app.sh`: A shell script launcher that exports appropriate environment variables (`KIVY_GL_BACKEND=sdl2`, `KIVY_WINDOW=sdl2`) for Pi hardware-accelerated rendering.
+   - `~/Desktop/CameraController.desktop`: A desktop launcher shortcut to run the app directly from the Pi desktop GUI.
+3. You can execute the app using either the desktop shortcut or directly from the terminal:
+   ```bash
+   ./run_app.sh
+   ```
+
 ---
 
 ## Configuration Schema

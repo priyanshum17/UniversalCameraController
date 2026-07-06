@@ -4,7 +4,8 @@ run:
 	uv run main.py
 
 setup:
-	uv sync
+	chmod +x setup.sh
+	./setup.sh
 
 format:
 	uv tool run ruff format src/ main.py
