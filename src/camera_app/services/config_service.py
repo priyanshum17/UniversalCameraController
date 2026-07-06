@@ -33,15 +33,31 @@ class ConfigService:
     def load(self) -> None:
         """
         Loads the configuration from the JSON file into memory.
-
-        Raises:
-            FileNotFoundError: If the configuration file does not exist.
+        Creates a default configuration file if it does not exist.
         """
         if not os.path.exists(self.config_path):
-            raise FileNotFoundError(f"Config file not found at {self.config_path}")
+            logger.info(
+                f"Config file not found at {self.config_path}. Creating default configuration."
+            )
+            self._config = {
+                "recording_dir": "./recordings",
+                "upload_enabled": True,
+                "active_camera": None,
+            }
+            self.save()
+            return
 
-        with open(self.config_path, "r") as f:
-            self._config = json.load(f)
+        try:
+            with open(self.config_path, "r") as f:
+                self._config = json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading config.json: {e}. Resetting to defaults.")
+            self._config = {
+                "recording_dir": "./recordings",
+                "upload_enabled": True,
+                "active_camera": None,
+            }
+            self.save()
 
     def save(self) -> None:
         """Saves the current in-memory configuration back to the JSON file."""

@@ -4,3 +4,5 @@ __pycache__/
 recordings/
 client_secrets.json
 .DS_Store
+src/camera_app/config.json
+
