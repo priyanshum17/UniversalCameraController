@@ -24,11 +24,11 @@
             BoxLayout:
                 size_hint_y: 0.7
                 padding: [10, 5, 10, 5]
-                Spinner:
-                    id: camera_spinner
+                Button:
+                    id: camera_select_btn
                     text: 'Select Camera'
-                    values: []
-                    on_text: root.on_camera_selected(self.text)
+                    background_color: 0.2, 0.4, 0.6, 1
+                    on_press: root.open_camera_selection_popup()
 
         BoxLayout:
             orientation: 'vertical'

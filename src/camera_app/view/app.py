@@ -1,5 +1,5 @@
 import os
-from typing import Any
+from typing import Any, Dict, Optional
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.lang import Builder
@@ -31,34 +31,75 @@ class CameraAppRoot(BoxLayout):  # type: ignore
         """
         super().__init__(**kwargs)
         self.controller: AppController = controller
+        self._selection_popup: Optional[Popup] = None
 
         # Register the callback so the controller knows where to send frames
         self.controller.set_frame_callback(self.on_frame_received)
 
-        # Populate the camera list dropdown spinner
-        self.update_camera_spinner()
+        # Sync the active camera label to show the default selection
+        self.update_active_camera_label()
 
         # Schedule the camera detection popup to show on startup
         Clock.schedule_once(lambda dt: self.show_detected_cameras(), 0.5)
 
-    def update_camera_spinner(self) -> None:
-        """Dynamically populates the camera selector dropdown with active camera names."""
-        cameras = self.controller.config_service.get_cameras()
-        self.camera_name_to_id = {
-            cam["name"]: cam["id"] for cam in cameras if cam.get("enabled", True)
-        }
-
-        spinner = self.ids.camera_spinner
-        spinner.values = list(self.camera_name_to_id.keys())
-
-        # Default the spinner text to the current selected camera name
-        current_cam = self.controller.config_service.get_camera(
-            self.controller.selected_cam_id
-        )
-        if current_cam and current_cam.get("enabled", True):
-            spinner.text = current_cam["name"]
+    def update_active_camera_label(self) -> None:
+        """Updates the text of the Select Camera button with the active camera name."""
+        active = self.controller.active_camera_config
+        btn = self.ids.camera_select_btn
+        if active:
+            btn.text = f"{active['name']}"
         else:
-            spinner.text = "Select Camera"
+            btn.text = "Select Camera"
+
+    def open_camera_selection_popup(self) -> None:
+        """Opens a popup listing all detected physical cameras for selection."""
+        detected = self.controller.detected_cameras
+
+        content = GridLayout(cols=1, spacing=10, size_hint_y=None)
+        content.bind(minimum_height=content.setter("height"))
+
+        if not detected:
+            lbl = Label(
+                text="No cameras detected. Close this popup and click 'Detect' to rescan.",
+                size_hint_y=None,
+                height=50,
+            )
+            content.add_widget(lbl)
+        else:
+            for cam in detected:
+                btn = Button(
+                    text=f"{cam['name']} (Device: {cam['device']})",
+                    size_hint_y=None,
+                    height=50,
+                    background_color=(0.2, 0.5, 0.8, 1),
+                )
+                # Bind the click handler to select the camera and close the popup
+                btn.bind(on_release=lambda instance, c=cam: self._on_camera_chosen(c))
+                content.add_widget(btn)
+
+        scroll = ScrollView(size_hint=(1, 0.8))
+        scroll.add_widget(content)
+
+        layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
+        layout.add_widget(scroll)
+
+        close_btn = Button(text="Close", size_hint_y=0.2)
+        layout.add_widget(close_btn)
+
+        self._selection_popup = Popup(
+            title="Choose Input Camera",
+            content=layout,
+            size_hint=(0.8, 0.8),
+        )
+        close_btn.bind(on_release=self._selection_popup.dismiss)
+        self._selection_popup.open()
+
+    def _on_camera_chosen(self, cam: Dict[str, str]) -> None:
+        """Callback invoked when a camera is chosen from the selection popup."""
+        if self._selection_popup:
+            self._selection_popup.dismiss()
+        self.controller.select_camera(cam["name"], cam["device"])
+        self.update_active_camera_label()
 
     def show_detected_cameras(self) -> None:
         """Displays a popup showing the physical cameras detected on the host system."""
@@ -95,20 +136,7 @@ class CameraAppRoot(BoxLayout):  # type: ignore
             size_hint=(0.8, 0.6),
         )
         close_btn.bind(on_release=popup.dismiss)
-
-        # When popup is closed, refresh the camera dropdown values
-        popup.bind(on_dismiss=lambda inst: self.update_camera_spinner())
         popup.open()
-
-    def on_camera_selected(self, cam_name: str) -> None:
-        """Called when the user selects a camera from the dropdown spinner."""
-        if hasattr(self, "camera_name_to_id") and cam_name in self.camera_name_to_id:
-            cam_id = self.camera_name_to_id[cam_name]
-            self.select_camera(cam_id)
-
-    def select_camera(self, cam_id: str) -> None:
-        """Forwards camera selection events from the UI to the controller."""
-        self.controller.select_camera(cam_id)
 
     def start_recording(self) -> None:
         """Forwards recording start events from the UI to the controller."""

@@ -3,7 +3,7 @@ import subprocess
 import re
 import sys
 import os
-from typing import Callable, Optional, List, Dict
+from typing import Callable, Optional, List, Dict, Any
 from src.camera_app.services.config_service import ConfigService
 from src.camera_app.services.camera_service import CameraService
 from src.camera_app.services.upload_service import UploadService
@@ -24,14 +24,28 @@ class AppController:
         """Initializes the controller and all dependent services."""
         self.config_service: ConfigService = ConfigService()
 
-        # Run device auto-detection and slot mapping on startup
-        self.detected_cameras: List[Dict[str, str]] = self.detect_and_mount_cameras()
+        # Run device auto-detection on startup (gathers all physical devices)
+        self.detected_cameras: List[Dict[str, str]] = self.detect_cameras()
 
         self.upload_service: UploadService = UploadService()
         self.camera_service: CameraService = CameraService(self.config_service)
 
         # State
-        self.selected_cam_id: str = self.config_service.get("selected_camera", "cam1")
+        # Load active camera config from settings (default to first detected if empty)
+        self.active_camera_config: Optional[Dict[str, Any]] = self.config_service.get(
+            "active_camera"
+        )
+        if not self.active_camera_config and self.detected_cameras:
+            first_cam = self.detected_cameras[0]
+            self.active_camera_config = {
+                "id": "active_cam",
+                "name": first_cam["name"],
+                "device": first_cam["device"],
+                "fps": 30,
+                "resolution": "640x480",
+            }
+            self.config_service.set("active_camera", self.active_camera_config)
+
         self.is_recording: bool = False
         self._on_frame_callback: Optional[Callable[[str, bytes, int, int], None]] = None
 
@@ -47,72 +61,86 @@ class AppController:
             callback (Callable): The function to call when a frame is ready.
         """
         self._on_frame_callback = callback
-        # Trigger preview automatically once the view has bound its callback
         self.start_preview()
 
-    def select_camera(self, cam_id: str) -> None:
+    def select_camera(self, name: str, device: str) -> None:
         """
-        Business logic for changing the active camera.
+        Switches the active camera feed to the chosen hardware device.
 
         Args:
-            cam_id (str): The unique identifier of the camera to switch to.
+            name (str): The display name of the camera.
+            device (str): The hardware device index or node path.
         """
-        if cam_id == self.selected_cam_id:
+        if self.active_camera_config and self.active_camera_config["device"] == device:
             return
 
-        logger.info(f"AppController: Switching selected camera to {cam_id}")
+        logger.info(f"AppController: Switching selected camera to {name} ({device})")
 
         if self.is_recording:
             self.stop_recording()
-            self.selected_cam_id = cam_id
-            self.config_service.set("selected_camera", cam_id)
+            self._update_active_config(name, device)
             self.start_recording()
         else:
             self.stop_preview()
-            self.selected_cam_id = cam_id
-            self.config_service.set("selected_camera", cam_id)
+            self._update_active_config(name, device)
             self.start_preview()
+
+    def _update_active_config(self, name: str, device: str) -> None:
+        """Updates and persists the active camera config settings."""
+        self.active_camera_config = {
+            "id": "active_cam",
+            "name": name,
+            "device": device,
+            "fps": 30,
+            "resolution": "640x480",
+        }
+        self.config_service.set("active_camera", self.active_camera_config)
 
     def start_preview(self) -> None:
         """Starts preview mode (no disk write, 10fps stream to UI) for the selected camera."""
-        if self.is_recording:
+        if self.is_recording or not self.active_camera_config:
             return
-        logger.info(f"AppController: Starting preview for {self.selected_cam_id}")
+        logger.info(
+            f"AppController: Starting preview for {self.active_camera_config['name']}"
+        )
         self.camera_service.start_camera(
-            self.selected_cam_id, self._internal_frame_router, record=False
+            self.active_camera_config, self._internal_frame_router, record=False
         )
 
     def stop_preview(self) -> None:
         """Stops the active preview."""
-        logger.info(f"AppController: Stopping preview for {self.selected_cam_id}")
-        self.camera_service.stop_camera(self.selected_cam_id)
+        if self.active_camera_config:
+            logger.info(
+                f"AppController: Stopping preview for {self.active_camera_config['name']}"
+            )
+            self.camera_service.stop_camera(self.active_camera_config["id"])
 
     def start_recording(self) -> None:
         """Business logic for starting a recording session."""
-        if self.is_recording:
+        if self.is_recording or not self.active_camera_config:
             return
 
         logger.info(
-            f"AppController: Starting recording session for {self.selected_cam_id}"
+            f"AppController: Starting recording session for {self.active_camera_config['name']}"
         )
         # Transition out of preview mode
-        self.camera_service.stop_camera(self.selected_cam_id)
+        self.camera_service.stop_camera(self.active_camera_config["id"])
 
         self.is_recording = True
         self.camera_service.start_camera(
-            self.selected_cam_id, self._internal_frame_router, record=True
+            self.active_camera_config, self._internal_frame_router, record=True
         )
 
     def stop_recording(self) -> None:
         """Business logic for stopping a recording session."""
-        if not self.is_recording:
+        if not self.is_recording or not self.active_camera_config:
             return
 
         logger.info("AppController: Stopping recording session")
         self.is_recording = False
 
         recorded_path: Optional[str] = self.camera_service.stop_camera(
-            self.selected_cam_id
+            self.active_camera_config["id"]
         )
 
         # Business Rule: Queue successful recordings to Drive
@@ -127,8 +155,8 @@ class AppController:
         logger.info("AppController: Shutting down services...")
         if self.is_recording:
             self.stop_recording()
-        else:
-            self.camera_service.stop_camera(self.selected_cam_id)
+        elif self.active_camera_config:
+            self.camera_service.stop_camera(self.active_camera_config["id"])
         self.upload_service.stop()
 
     def _internal_frame_router(
@@ -137,26 +165,25 @@ class AppController:
         """
         Routes frames from the CameraService to the UI.
 
-        This is where AI inference or OpenCV processing could easily be injected
-        before handing the frame to the UI.
-
         Args:
             cam_id (str): The camera ID emitting the frame.
             raw_frame (bytes): The raw RGB24 video frame.
             width (int): The width of the frame.
             height (int): The height of the frame.
         """
-        if cam_id != self.selected_cam_id:
+        if not self.active_camera_config or cam_id != self.active_camera_config["id"]:
             return
 
         # Forward to UI
         if self._on_frame_callback:
             self._on_frame_callback(cam_id, raw_frame, width, height)
 
-    def detect_and_mount_cameras(self) -> List[Dict[str, str]]:
+    def detect_cameras(self) -> List[Dict[str, str]]:
         """
-        Runs platform-specific commands to detect physical cameras,
-        mounts them to logical slots (cam1, cam2, cam3), and updates the configuration.
+        Runs platform-specific commands to detect all physical cameras.
+
+        Returns:
+            List[Dict[str, str]]: A list of dictionaries containing 'name' and 'device' for each camera.
         """
         detected: List[Dict[str, str]] = []
 
@@ -236,22 +263,5 @@ class AppController:
             if d["device"] not in seen:
                 seen.add(d["device"])
                 unique_detected.append(d)
-
-        # 2. Mount detected cameras to logical slots (cam1, cam2, cam3)
-        for i, d in enumerate(unique_detected[:3]):
-            cam_id = f"cam{i + 1}"
-            updates = {"name": d["name"], "device": d["device"], "enabled": True}
-            self.config_service.update_camera(cam_id, updates)
-            logger.info(
-                f"Mounted physical camera '{d['name']}' ({d['device']}) to logical slot '{cam_id}'"
-            )
-
-        # Disable any remaining logical slots if fewer cameras are detected
-        for i in range(len(unique_detected), 3):
-            cam_id = f"cam{i + 1}"
-            self.config_service.update_camera(cam_id, {"enabled": False})
-            logger.info(
-                f"Logical slot '{cam_id}' has no physical camera attached. Disabling."
-            )
 
         return unique_detected

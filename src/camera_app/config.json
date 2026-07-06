@@ -1,31 +1,5 @@
 {
-    "cameras": [
-        {
-            "id": "cam1",
-            "name": "FaceTime HD Camera",
-            "device": "0",
-            "enabled": true,
-            "fps": 30,
-            "resolution": "640x480"
-        },
-        {
-            "id": "cam2",
-            "name": "iPhone Camera",
-            "device": "1",
-            "enabled": true,
-            "fps": 30,
-            "resolution": "640x480"
-        },
-        {
-            "id": "cam3",
-            "name": "iPhone Desk View Camera",
-            "device": "2",
-            "enabled": true,
-            "fps": 30,
-            "resolution": "640x480"
-        }
-    ],
     "recording_dir": "./recordings",
     "upload_enabled": true,
-    "selected_camera": "cam1"
+    "active_camera": null
 }
