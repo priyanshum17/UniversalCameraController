@@ -1,9 +1,7 @@
 <div align="center">
 
 <!-- Placeholder for Logo -->
-<img src="https://via.placeholder.com/150x150.png?text=Logo+Here" alt="Universal Camera Controller Logo" width="150" />
-
-# Universal Camera Controller 📸
+# Universal Camera Controller
 
 *A high-performance, event-driven Kivy application for managing, recording, and streaming multiple camera feeds directly to Google Drive.*
 
@@ -12,34 +10,31 @@
 [![Code Style: Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
 
-<!-- Placeholder for Banner or Demo GIF -->
-<img src="https://via.placeholder.com/800x400.png?text=Demo+GIF+Placeholder" alt="Demo GIF" width="800" />
-
 </div>
 
 ---
 
-## ✨ Features
+## Features
 
-- 🚀 **Zero Python Encoding**: Hardware-accelerated `ffmpeg` (e.g., `avfoundation`, `v4l2`) runs in a separate process. Python never bottlenecks video encoding.
-- 🔀 **Single Capture, Dual Output**: Simultaneously record pristine MP4 footage and pipe low-latency RGB streams to the UI.
-- ☁️ **Non-Blocking Uploads**: Seamlessly pushes completed recordings to Google Drive in the background.
-- 🧩 **Service-Oriented Architecture**: Clean MVC separation means you can easily swap the Kivy UI or add AI Computer Vision services to the pipeline.
+- **Zero Python Encoding**: Hardware-accelerated `ffmpeg` (e.g., `avfoundation`, `v4l2`) runs in a separate process. Python never bottlenecks video encoding.
+- **Single Capture, Dual Output**: Simultaneously record pristine MP4 footage and pipe low-latency RGB streams to the UI.
+- **Non-Blocking Uploads**: Seamlessly pushes completed recordings to Google Drive in the background.
+- **Service-Oriented Architecture**: Clean MVC separation means you can easily swap the Kivy UI or add AI Computer Vision services to the pipeline.
 
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 graph TD
-    UI[Kivy UI<br/>(View)] -- Events --> C[AppController<br/>(Core)]
+    UI["Kivy UI (View)"] -- Events --> C["AppController (Core)"]
     C -- Commands --> CS[CameraService]
     C -- Paths --> US[UploadService]
     
     subgraph Services
-        CS -- Spawns --> FW[CameraWorker<br/>(FFmpeg)]
-        FW -- Writes --> Disk[(Local Storage)]
+        CS -- Spawns --> FW["CameraWorker (FFmpeg)"]
+        FW -- Writes --> Disk[("Local Storage")]
         FW -- Streams --> SR[StreamReceiver]
         US -- Reads --> Disk
-        US -- Uploads --> Drive[(Google Drive)]
+        US -- Uploads --> Drive[("Google Drive")]
     end
     
     SR -- Frames --> C
@@ -51,7 +46,7 @@ graph TD
     style Drive fill:#2ecc71,stroke:#27ae60,color:#fff
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.11+
@@ -72,7 +67,7 @@ uv sync
 make run
 ```
 
-## ⚙️ Configuration
+## Configuration
 
 Camera settings are stored in `src/camera_app/config.json`. The application supports `avfoundation` (macOS), `v4l2` (Linux/Raspberry Pi), and `dshow` (Windows).
 
@@ -93,9 +88,9 @@ Camera settings are stored in `src/camera_app/config.json`. The application supp
 }
 ```
 
-## 🤝 Contributing
+## Contributing
 
-Contributions make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+Contributions make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are greatly appreciated.
 
 1. Fork the Project
 2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
@@ -103,6 +98,6 @@ Contributions make the open-source community such an amazing place to learn, ins
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 📄 License
+## License
 
 Distributed under the MIT License. See `LICENSE` for more information.
