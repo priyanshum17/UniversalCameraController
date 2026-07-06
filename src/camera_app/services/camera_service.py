@@ -34,26 +34,22 @@ class CameraWorker:
         self.width: int = int(config["resolution"].split("x")[0])
         self.height: int = int(config["resolution"].split("x")[1])
 
-    def start(self, base_record_dir: str) -> None:
+    def start(self, base_record_dir: Optional[str] = None) -> None:
         """
         Starts the FFmpeg subprocess.
 
-        Captures the device feed to an MP4 file and a raw video stream.
+        Captures the device feed. If base_record_dir is provided, encodes to MP4.
+        Pipes raw RGB video at 10fps to stdout for UI rendering.
 
         Args:
-            base_record_dir (str): The directory where recordings should be saved.
+            base_record_dir (str, optional): The directory where recordings should be saved.
+                                             If None, starts in preview mode.
         """
         if self.process is not None:
             return
 
         device: str = self.config["device"]
         fps: int = self.config["fps"]
-
-        os.makedirs(base_record_dir, exist_ok=True)
-        timestamp: str = time.strftime("%Y%m%d-%H%M%S")
-        self.recording_path = os.path.join(
-            base_record_dir, f"{self.config['id']}_{timestamp}.mp4"
-        )
 
         input_format: str
         if sys.platform == "darwin":
@@ -74,13 +70,31 @@ class CameraWorker:
             self.config["resolution"],
             "-i",
             device,
-            "-c:v",
-            "libx264",
-            "-preset",
-            "ultrafast",
-            "-f",
-            "mp4",
-            self.recording_path,
+        ]
+
+        if base_record_dir is not None:
+            # Record mode: output to file AND pipe rawvideo at 10fps
+            os.makedirs(base_record_dir, exist_ok=True)
+            timestamp: str = time.strftime("%Y%m%d-%H%M%S")
+            self.recording_path = os.path.join(
+                base_record_dir, f"{self.config['id']}_{timestamp}.mp4"
+            )
+            cmd += [
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-f",
+                "mp4",
+                self.recording_path,
+            ]
+        else:
+            self.recording_path = None
+
+        # Output rawvideo to stdout at 10fps
+        cmd += [
+            "-r",
+            "10",
             "-f",
             "rawvideo",
             "-pix_fmt",
@@ -93,7 +107,9 @@ class CameraWorker:
         self.process = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=10**8
         )
-        logger.info(f"[{self.config['id']}] Started FFmpeg: {self.recording_path}")
+        logger.info(
+            f"[{self.config['id']}] Started FFmpeg (Recording: {base_record_dir is not None}): {self.recording_path}"
+        )
 
     def stop(self) -> Optional[str]:
         """
@@ -103,10 +119,28 @@ class CameraWorker:
             Optional[str]: The path to the recorded MP4 file, or None if not started.
         """
         if self.process:
+            logger.info(f"[{self.config['id']}] Stopping FFmpeg process...")
+            # Close stdout to break any blocking reads/writes
+            if self.process.stdout:
+                try:
+                    self.process.stdout.close()
+                except Exception as e:
+                    logger.debug(f"Error closing stdout: {e}")
+
             self.process.terminate()
-            self.process.wait()
+            try:
+                self.process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    f"[{self.config['id']}] FFmpeg did not stop in time. Killing..."
+                )
+                self.process.kill()
+                self.process.wait()
+
             self.process = None
-            logger.info(f"[{self.config['id']}] Stopped FFmpeg.")
+            logger.info(
+                f"[{self.config['id']}] Stopped FFmpeg (Recording: {self.recording_path is not None}): {self.recording_path}"
+            )
             return self.recording_path
         return None
 
@@ -137,6 +171,8 @@ class StreamReceiver:
         self.running: bool = False
         self.thread: Optional[threading.Thread] = None
         self.frame_size: int = self.worker.width * self.worker.height * 3
+        # Flag to prevent UI event loop starvation
+        self.ui_update_pending: bool = False
 
     def start(self) -> None:
         """Starts the background thread to read from the FFmpeg stdout pipe."""
@@ -159,23 +195,41 @@ class StreamReceiver:
     def _read_stream(self) -> None:
         """The internal loop that continuously reads raw frames from stdout."""
         logger.info(f"[{self.worker.config['id']}] Stream receiver thread started.")
-        while (
-            self.running and self.worker.process and self.worker.process.poll() is None
-        ):
-            raw_frame: bytes = self.worker.process.stdout.read(self.frame_size)
-            if len(raw_frame) != self.frame_size:
-                break
-            Clock.schedule_once(
-                lambda dt, frame=raw_frame: self._update_texture(frame), 0
-            )
+        try:
+            while (
+                self.running
+                and self.worker.process
+                and self.worker.process.poll() is None
+            ):
+                raw_frame: bytes = self.worker.process.stdout.read(self.frame_size)
+                if len(raw_frame) != self.frame_size:
+                    break
 
-        logger.info(f"[{self.worker.config['id']}] Stream receiver thread stopped.")
+                # Only schedule the frame update if Kivy has processed the last one
+                if not self.ui_update_pending:
+                    self.ui_update_pending = True
+                    Clock.schedule_once(
+                        lambda dt, frame=raw_frame: self._update_texture(frame), 0
+                    )
+        except (ValueError, OSError) as e:
+            logger.debug(
+                f"[{self.worker.config['id']}] Stream receiver read interrupted: {e}"
+            )
+        finally:
+            logger.info(f"[{self.worker.config['id']}] Stream receiver thread stopped.")
 
     def _update_texture(self, raw_frame: bytes) -> None:
         """Forwards the frame data to the provided callback."""
-        self.on_frame_callback(
-            self.worker.config["id"], raw_frame, self.worker.width, self.worker.height
-        )
+        try:
+            self.on_frame_callback(
+                self.worker.config["id"],
+                raw_frame,
+                self.worker.width,
+                self.worker.height,
+            )
+        finally:
+            # Done rendering; allow the next frame to be scheduled
+            self.ui_update_pending = False
 
 
 class CameraService:
@@ -198,7 +252,10 @@ class CameraService:
         self.receivers: Dict[str, StreamReceiver] = {}
 
     def start_camera(
-        self, cam_id: str, on_frame_callback: Callable[[str, bytes, int, int], None]
+        self,
+        cam_id: str,
+        on_frame_callback: Callable[[str, bytes, int, int], None],
+        record: bool = True,
     ) -> Optional[CameraWorker]:
         """
         Starts recording and streaming for a specific camera.
@@ -206,22 +263,34 @@ class CameraService:
         Args:
             cam_id (str): The unique ID of the camera to start.
             on_frame_callback (Callable): Callback to receive the video frames.
+            record (bool): If True, starts in recording mode (saves to disk).
+                           If False, starts in preview mode.
 
         Returns:
             Optional[CameraWorker]: The started worker, or None if the config was invalid.
         """
-        record_dir: str = self.config_service.get("recording_dir", "./recordings")
         cam_config: Optional[Dict[str, Any]] = self.config_service.get_camera(cam_id)
-        if cam_config:
+        if cam_config and cam_config.get("enabled", True):
             worker = CameraWorker(cam_config)
             self.workers[cam_id] = worker
-            worker.start(record_dir)
+
+            if record:
+                record_dir: str = self.config_service.get(
+                    "recording_dir", "./recordings"
+                )
+                worker.start(record_dir)
+            else:
+                worker.start(None)
 
             receiver = StreamReceiver(worker, on_frame_callback)
             self.receivers[cam_id] = receiver
             receiver.start()
 
             return worker
+        else:
+            logger.warning(
+                f"CameraService: Camera '{cam_id}' is disabled or not configured. Cannot start."
+            )
         return None
 
     def stop_camera(self, cam_id: str) -> Optional[str]:

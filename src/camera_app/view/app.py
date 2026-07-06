@@ -106,6 +106,7 @@ class CameraAppRoot(BoxLayout):  # type: ignore
             main_feed.texture.flip_vertical()
 
         main_feed.texture.blit_buffer(raw_frame, colorfmt="rgb", bufferfmt="ubyte")
+        main_feed.canvas.ask_update()
 
 
 class CameraApp(App):  # type: ignore

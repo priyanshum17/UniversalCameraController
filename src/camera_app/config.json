@@ -2,7 +2,7 @@
     "cameras": [
         {
             "id": "cam1",
-            "name": "Camera 1",
+            "name": "FaceTime HD Camera",
             "device": "0",
             "enabled": true,
             "fps": 30,
@@ -10,17 +10,17 @@
         },
         {
             "id": "cam2",
-            "name": "Camera 2",
+            "name": "iPhone Camera",
             "device": "1",
-            "enabled": false,
+            "enabled": true,
             "fps": 30,
             "resolution": "640x480"
         },
         {
             "id": "cam3",
-            "name": "Camera 3",
+            "name": "iPhone Desk View Camera",
             "device": "2",
-            "enabled": false,
+            "enabled": true,
             "fps": 30,
             "resolution": "640x480"
         }
