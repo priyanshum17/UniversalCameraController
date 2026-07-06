@@ -14,13 +14,18 @@ class ConfigService:
     to be easily swapped to Google Sheets or a database in the future.
     """
 
-    def __init__(self, config_path: str = "src/camera_app/config.json") -> None:
+    def __init__(self, config_path: Optional[str] = None) -> None:
         """
         Initializes the ConfigService.
 
         Args:
-            config_path (str): The file path to the JSON configuration file.
+            config_path (str, optional): The file path to the JSON configuration file.
+                                         Defaults to src/camera_app/config.json.
         """
+        if config_path is None:
+            config_path = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "config.json")
+            )
         self.config_path: str = config_path
         self._config: Dict[str, Any] = {}
         self.load()
