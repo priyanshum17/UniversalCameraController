@@ -23,23 +23,12 @@
                 size_hint_y: 0.3
             BoxLayout:
                 size_hint_y: 0.7
-                spacing: 5
-                ToggleButton:
-                    id: btn_cam1
-                    text: 'Cam 1'
-                    group: 'cams'
-                    state: 'down'
-                    on_press: root.select_camera('cam1')
-                ToggleButton:
-                    id: btn_cam2
-                    text: 'Cam 2'
-                    group: 'cams'
-                    on_press: root.select_camera('cam2')
-                ToggleButton:
-                    id: btn_cam3
-                    text: 'Cam 3'
-                    group: 'cams'
-                    on_press: root.select_camera('cam3')
+                padding: [10, 5, 10, 5]
+                Spinner:
+                    id: camera_spinner
+                    text: 'Select Camera'
+                    values: []
+                    on_text: root.on_camera_selected(self.text)
 
         BoxLayout:
             orientation: 'vertical'

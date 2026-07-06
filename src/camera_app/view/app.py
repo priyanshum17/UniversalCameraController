@@ -35,8 +35,30 @@ class CameraAppRoot(BoxLayout):  # type: ignore
         # Register the callback so the controller knows where to send frames
         self.controller.set_frame_callback(self.on_frame_received)
 
+        # Populate the camera list dropdown spinner
+        self.update_camera_spinner()
+
         # Schedule the camera detection popup to show on startup
         Clock.schedule_once(lambda dt: self.show_detected_cameras(), 0.5)
+
+    def update_camera_spinner(self) -> None:
+        """Dynamically populates the camera selector dropdown with active camera names."""
+        cameras = self.controller.config_service.get_cameras()
+        self.camera_name_to_id = {
+            cam["name"]: cam["id"] for cam in cameras if cam.get("enabled", True)
+        }
+
+        spinner = self.ids.camera_spinner
+        spinner.values = list(self.camera_name_to_id.keys())
+
+        # Default the spinner text to the current selected camera name
+        current_cam = self.controller.config_service.get_camera(
+            self.controller.selected_cam_id
+        )
+        if current_cam and current_cam.get("enabled", True):
+            spinner.text = current_cam["name"]
+        else:
+            spinner.text = "Select Camera"
 
     def show_detected_cameras(self) -> None:
         """Displays a popup showing the physical cameras detected on the host system."""
@@ -47,7 +69,9 @@ class CameraAppRoot(BoxLayout):  # type: ignore
 
         if not detected:
             lbl = Label(
-                text="No cameras detected on the system.", size_hint_y=None, height=40
+                text="No cameras detected on the system.",
+                size_hint_y=None,
+                height=40,
             )
             content.add_widget(lbl)
         else:
@@ -71,7 +95,16 @@ class CameraAppRoot(BoxLayout):  # type: ignore
             size_hint=(0.8, 0.6),
         )
         close_btn.bind(on_release=popup.dismiss)
+
+        # When popup is closed, refresh the camera dropdown values
+        popup.bind(on_dismiss=lambda inst: self.update_camera_spinner())
         popup.open()
+
+    def on_camera_selected(self, cam_name: str) -> None:
+        """Called when the user selects a camera from the dropdown spinner."""
+        if hasattr(self, "camera_name_to_id") and cam_name in self.camera_name_to_id:
+            cam_id = self.camera_name_to_id[cam_name]
+            self.select_camera(cam_id)
 
     def select_camera(self, cam_id: str) -> None:
         """Forwards camera selection events from the UI to the controller."""
