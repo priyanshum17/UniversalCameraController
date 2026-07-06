@@ -75,10 +75,20 @@ uv sync
 
 ### Run Command
 
-The repository provides a `Makefile` wrapper to start the main application:
+The repository provides a `Makefile` wrapper to start the main GUI application:
 
 ```bash
 make run
+```
+
+For automated scripts and sequence recording without launching the GUI, run the CLI utility:
+
+```bash
+# Runs the sequence: camera 1 for 5s, camera 2 for 5s, 1-second pause
+make run-sequence
+
+# Or execute with custom parameters
+uv run examples/sequence_recorder.py --cameras cam1 cam2 --durations 10 30 --loops 2 --interval 2.0
 ```
 
 ---
