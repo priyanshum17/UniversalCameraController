@@ -1,5 +1,9 @@
 import logging
-from typing import Callable, Optional
+import subprocess
+import re
+import sys
+import os
+from typing import Callable, Optional, List, Dict, Any
 from src.camera_app.services.config_service import ConfigService
 from src.camera_app.services.camera_service import CameraService
 from src.camera_app.services.upload_service import UploadService
@@ -19,6 +23,10 @@ class AppController:
     def __init__(self) -> None:
         """Initializes the controller and all dependent services."""
         self.config_service: ConfigService = ConfigService()
+
+        # Run device auto-detection and slot mapping on startup
+        self.detected_cameras: List[Dict[str, str]] = self.detect_and_mount_cameras()
+
         self.upload_service: UploadService = UploadService()
         self.camera_service: CameraService = CameraService(self.config_service)
 
@@ -117,3 +125,106 @@ class AppController:
         # Forward to UI
         if self._on_frame_callback:
             self._on_frame_callback(cam_id, raw_frame, width, height)
+
+    def detect_and_mount_cameras(self) -> List[Dict[str, str]]:
+        """
+        Runs platform-specific commands to detect physical cameras,
+        mounts them to logical slots (cam1, cam2, cam3), and updates the configuration.
+        """
+        detected: List[Dict[str, str]] = []
+
+        # 1. Platform-specific detection
+        if sys.platform == "darwin":
+            # macOS: ffmpeg -f avfoundation -list_devices true -i ""
+            cmd = ["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""]
+            try:
+                result = subprocess.run(
+                    cmd,
+                    stderr=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    text=True,
+                    timeout=5,
+                )
+                output = result.stderr
+            except Exception as e:
+                logger.error(f"Error listing macOS devices: {e}")
+                output = ""
+
+            video_section = True
+            for line in output.splitlines():
+                if "AVFoundation audio devices" in line:
+                    video_section = False
+                if video_section and "[" in line and "]" in line:
+                    match = re.search(r"\[(\d+)\]\s+(.+)", line)
+                    if match:
+                        idx = match.group(1)
+                        name = match.group(2)
+                        # Skip screen capture devices
+                        if "capture screen" not in name.lower():
+                            detected.append({"name": name, "device": idx})
+
+        elif sys.platform.startswith("linux"):
+            # Linux: glob sysfs video4linux
+            import glob
+
+            for path in sorted(glob.glob("/sys/class/video4linux/video*")):
+                dev_name = os.path.basename(path)
+                dev_path = f"/dev/{dev_name}"
+                name_file = os.path.join(path, "name")
+                if os.path.exists(name_file):
+                    try:
+                        with open(name_file, "r") as f:
+                            name = f.read().strip()
+                        if "metadata" not in name.lower():
+                            detected.append({"name": name, "device": dev_path})
+                    except Exception as e:
+                        logger.error(f"Error reading sysfs for {dev_name}: {e}")
+        else:
+            # Windows / Fallback
+            cmd = ["ffmpeg", "-f", "dshow", "-list_devices", "true", "-i", "dummy"]
+            try:
+                result = subprocess.run(
+                    cmd,
+                    stderr=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    text=True,
+                    timeout=5,
+                )
+                output = result.stderr
+            except Exception as e:
+                logger.error(f"Error listing Windows devices: {e}")
+                output = ""
+
+            for line in output.splitlines():
+                if "(video)" in line:
+                    match = re.search(r'"([^"]+)"', line)
+                    if match:
+                        name = match.group(1)
+                        detected.append({"name": name, "device": f"video={name}"})
+
+        # Remove duplicate device paths if any
+        seen = set()
+        unique_detected: List[Dict[str, str]] = []
+        for d in detected:
+            if d["device"] not in seen:
+                seen.add(d["device"])
+                unique_detected.append(d)
+
+        # 2. Mount detected cameras to logical slots (cam1, cam2, cam3)
+        for i, d in enumerate(unique_detected[:3]):
+            cam_id = f"cam{i + 1}"
+            updates = {"name": d["name"], "device": d["device"], "enabled": True}
+            self.config_service.update_camera(cam_id, updates)
+            logger.info(
+                f"Mounted physical camera '{d['name']}' ({d['device']}) to logical slot '{cam_id}'"
+            )
+
+        # Disable any remaining logical slots if fewer cameras are detected
+        for i in range(len(unique_detected), 3):
+            cam_id = f"cam{i + 1}"
+            self.config_service.update_camera(cam_id, {"enabled": False})
+            logger.info(
+                f"Logical slot '{cam_id}' has no physical camera attached. Disabling."
+            )
+
+        return unique_detected

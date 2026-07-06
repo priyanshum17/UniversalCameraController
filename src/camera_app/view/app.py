@@ -4,6 +4,12 @@ from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.lang import Builder
 from kivy.graphics.texture import Texture
+from kivy.uix.popup import Popup
+from kivy.uix.label import Label
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.button import Button
+from kivy.clock import Clock
 from src.camera_app.core.controller import AppController
 
 
@@ -28,6 +34,44 @@ class CameraAppRoot(BoxLayout):  # type: ignore
 
         # Register the callback so the controller knows where to send frames
         self.controller.set_frame_callback(self.on_frame_received)
+
+        # Schedule the camera detection popup to show on startup
+        Clock.schedule_once(lambda dt: self.show_detected_cameras(), 0.5)
+
+    def show_detected_cameras(self) -> None:
+        """Displays a popup showing the physical cameras detected on the host system."""
+        detected = self.controller.detected_cameras
+
+        content = GridLayout(cols=1, spacing=10, size_hint_y=None)
+        content.bind(minimum_height=content.setter("height"))
+
+        if not detected:
+            lbl = Label(
+                text="No cameras detected on the system.", size_hint_y=None, height=40
+            )
+            content.add_widget(lbl)
+        else:
+            for cam in detected:
+                text = f"{cam['name']} (Port: {cam['device']})"
+                lbl = Label(text=text, size_hint_y=None, height=40)
+                content.add_widget(lbl)
+
+        scroll = ScrollView(size_hint=(1, 0.8))
+        scroll.add_widget(content)
+
+        layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
+        layout.add_widget(scroll)
+
+        close_btn = Button(text="Close", size_hint_y=0.2)
+        layout.add_widget(close_btn)
+
+        popup = Popup(
+            title="Hardware Auto-Detection Results",
+            content=layout,
+            size_hint=(0.8, 0.6),
+        )
+        close_btn.bind(on_release=popup.dismiss)
+        popup.open()
 
     def select_camera(self, cam_id: str) -> None:
         """Forwards camera selection events from the UI to the controller."""

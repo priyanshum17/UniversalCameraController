@@ -45,7 +45,7 @@
             orientation: 'vertical'
             size_hint_x: 0.4
             Label:
-                text: "Recording"
+                text: "Controls"
                 size_hint_y: 0.3
             BoxLayout:
                 size_hint_y: 0.7
@@ -58,3 +58,7 @@
                     text: 'Stop'
                     background_color: 0.8, 0, 0, 1
                     on_press: root.stop_recording()
+                Button:
+                    text: 'Detect'
+                    background_color: 0.2, 0.6, 0.8, 1
+                    on_press: root.show_detected_cameras()
