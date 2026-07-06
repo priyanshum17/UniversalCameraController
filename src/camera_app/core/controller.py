@@ -221,6 +221,19 @@ class AppController:
             # Linux: glob sysfs video4linux
             import glob
 
+            # Non-camera device name patterns to filter out (virtual capture nodes, hardware encoders/decoders/ISPs)
+            blacklisted_keywords = [
+                "stats",
+                "config",
+                "dec",
+                "enc",
+                "isp",
+                "input",
+                "output",
+                "tdn",
+                "pisp",
+            ]
+
             for path in sorted(glob.glob("/sys/class/video4linux/video*")):
                 dev_name = os.path.basename(path)
                 dev_path = f"/dev/{dev_name}"
@@ -229,7 +242,8 @@ class AppController:
                     try:
                         with open(name_file, "r") as f:
                             name = f.read().strip()
-                        if "metadata" not in name.lower():
+                        # Only keep nodes that are actual cameras
+                        if not any(kw in name.lower() for kw in blacklisted_keywords):
                             detected.append({"name": name, "device": dev_path})
                     except Exception as e:
                         logger.error(f"Error reading sysfs for {dev_name}: {e}")
@@ -259,9 +273,29 @@ class AppController:
         # Remove duplicate device paths if any
         seen = set()
         unique_detected: List[Dict[str, str]] = []
-        for d in detected:
+        for d in sorted(detected, key=lambda x: x["device"]):
             if d["device"] not in seen:
                 seen.add(d["device"])
+
+                # Filter out consecutive odd-numbered metadata endpoints on Linux (e.g. skip /dev/video1 if /dev/video0 is present)
+                if sys.platform.startswith("linux"):
+                    node_num_str = "".join(filter(str.isdigit, d["device"]))
+                    if node_num_str:
+                        node_num = int(node_num_str)
+                        if node_num % 2 == 1 and unique_detected:
+                            prev_node = unique_detected[-1]
+                            prev_node_num = int(
+                                "".join(filter(str.isdigit, prev_node["device"]))
+                            )
+                            if (
+                                d["name"] == prev_node["name"]
+                                and node_num == prev_node_num + 1
+                            ):
+                                logger.info(
+                                    f"Skipping metadata node: {d['device']} ({d['name']})"
+                                )
+                                continue
+
                 unique_detected.append(d)
 
         return unique_detected

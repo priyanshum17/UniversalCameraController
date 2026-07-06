@@ -64,10 +64,20 @@ class CameraWorker:
             "-y",
             "-f",
             input_format,
-            "-framerate",
-            str(fps),
-            "-video_size",
-            self.config["resolution"],
+        ]
+
+        # On Linux/v4l2, strict input video size or framerate configurations can cause
+        # driver handshaking failures on custom sensors (like Arducam or FLIR). We let
+        # FFmpeg auto-negotiate the input, and downsample/scale on output instead.
+        if sys.platform != "linux":
+            cmd += [
+                "-framerate",
+                str(fps),
+                "-video_size",
+                self.config["resolution"],
+            ]
+
+        cmd += [
             "-i",
             device,
         ]
@@ -253,7 +263,7 @@ class CameraService:
 
     def start_camera(
         self,
-        cam_id: str,
+        cam_config: Dict[str, Any],
         on_frame_callback: Callable[[str, bytes, int, int], None],
         record: bool = True,
     ) -> Optional[CameraWorker]:
@@ -261,7 +271,7 @@ class CameraService:
         Starts recording and streaming for a specific camera.
 
         Args:
-            cam_id (str): The unique ID of the camera to start.
+            cam_config (Dict[str, Any]): The camera configuration.
             on_frame_callback (Callable): Callback to receive the video frames.
             record (bool): If True, starts in recording mode (saves to disk).
                            If False, starts in preview mode.
@@ -269,7 +279,7 @@ class CameraService:
         Returns:
             Optional[CameraWorker]: The started worker, or None if the config was invalid.
         """
-        cam_config: Optional[Dict[str, Any]] = self.config_service.get_camera(cam_id)
+        cam_id = cam_config.get("id", "active_cam")
         if cam_config and cam_config.get("enabled", True):
             worker = CameraWorker(cam_config)
             self.workers[cam_id] = worker
@@ -289,7 +299,7 @@ class CameraService:
             return worker
         else:
             logger.warning(
-                f"CameraService: Camera '{cam_id}' is disabled or not configured. Cannot start."
+                "CameraService: Camera configuration is invalid or disabled. Cannot start."
             )
         return None
 
