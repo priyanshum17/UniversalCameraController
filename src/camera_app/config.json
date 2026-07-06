@@ -1,0 +1,31 @@
+{
+    "cameras": [
+        {
+            "id": "cam1",
+            "name": "Camera 1",
+            "device": "0",
+            "enabled": true,
+            "fps": 30,
+            "resolution": "640x480"
+        },
+        {
+            "id": "cam2",
+            "name": "Camera 2",
+            "device": "1",
+            "enabled": false,
+            "fps": 30,
+            "resolution": "640x480"
+        },
+        {
+            "id": "cam3",
+            "name": "Camera 3",
+            "device": "2",
+            "enabled": false,
+            "fps": 30,
+            "resolution": "640x480"
+        }
+    ],
+    "recording_dir": "./recordings",
+    "upload_enabled": true,
+    "selected_camera": "cam1"
+}
