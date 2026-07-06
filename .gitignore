@@ -1,0 +1,6 @@
+.venv
+__pycache__/
+*.pyc
+recordings/
+client_secrets.json
+.DS_Store
