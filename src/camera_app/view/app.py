@@ -9,6 +9,7 @@ from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.button import Button
+from kivy.uix.textinput import TextInput
 from kivy.clock import Clock
 from src.camera_app.core.controller import AppController
 
@@ -38,6 +39,7 @@ class CameraAppRoot(BoxLayout):  # type: ignore
 
         # Sync the active camera label to show the default selection
         self.update_active_camera_label()
+        self.update_info_label()
 
         # Schedule the camera detection popup to show on startup
         Clock.schedule_once(lambda dt: self.show_detected_cameras(), 0.5)
@@ -50,6 +52,15 @@ class CameraAppRoot(BoxLayout):  # type: ignore
             btn.text = f"{active['name']}"
         else:
             btn.text = "Select Camera"
+
+    def update_info_label(self) -> None:
+        """Updates the info label with current FPS and Resolution."""
+        active = self.controller.active_camera_config
+        lbl = self.ids.info_label
+        if active:
+            lbl.text = f"Current Settings: {active.get('fps', '--')} FPS | {active.get('resolution', '--')}"
+        else:
+            lbl.text = "Current Settings: -- FPS | -- Resolution"
 
     def open_camera_selection_popup(self) -> None:
         """Opens a popup listing all detected physical cameras for selection."""
@@ -100,6 +111,7 @@ class CameraAppRoot(BoxLayout):  # type: ignore
             self._selection_popup.dismiss()
         self.controller.select_camera(cam["name"], cam["device"])
         self.update_active_camera_label()
+        self.update_info_label()
 
     def show_detected_cameras(self) -> None:
         """Displays a popup showing the physical cameras detected on the host system."""
@@ -135,6 +147,62 @@ class CameraAppRoot(BoxLayout):  # type: ignore
             content=layout,
             size_hint=(0.8, 0.6),
         )
+        close_btn.bind(on_release=popup.dismiss)
+        popup.open()
+
+    def open_settings_popup(self) -> None:
+        """Opens a popup to change FPS and Resolution."""
+        active = self.controller.active_camera_config
+        if not active:
+            return
+
+        current_fps = str(active.get("fps", 30))
+        current_res = active.get("resolution", "640x480")
+
+        layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
+
+        # FPS Input
+        fps_layout = BoxLayout(
+            orientation="horizontal", spacing=10, size_hint_y=None, height=40
+        )
+        fps_layout.add_widget(Label(text="FPS:", size_hint_x=0.3))
+        fps_input = TextInput(
+            text=current_fps, multiline=False, input_filter="int", size_hint_x=0.7
+        )
+        fps_layout.add_widget(fps_input)
+        layout.add_widget(fps_layout)
+
+        # Resolution Input
+        res_layout = BoxLayout(
+            orientation="horizontal", spacing=10, size_hint_y=None, height=40
+        )
+        res_layout.add_widget(Label(text="Resolution:", size_hint_x=0.3))
+        res_input = TextInput(text=current_res, multiline=False, size_hint_x=0.7)
+        res_layout.add_widget(res_input)
+        layout.add_widget(res_layout)
+
+        # Apply & Close Buttons
+        btn_layout = BoxLayout(
+            orientation="horizontal", spacing=10, size_hint_y=None, height=50
+        )
+        apply_btn = Button(text="Apply", background_color=(0, 0.8, 0, 1))
+        close_btn = Button(text="Cancel", background_color=(0.8, 0, 0, 1))
+        btn_layout.add_widget(apply_btn)
+        btn_layout.add_widget(close_btn)
+        layout.add_widget(btn_layout)
+
+        popup = Popup(title="Camera Settings", content=layout, size_hint=(0.6, 0.4))
+
+        def on_apply(instance: Any) -> None:
+            fps_val = int(fps_input.text) if fps_input.text.isdigit() else 30
+            res_val = res_input.text.strip()
+            if not res_val:
+                res_val = "640x480"
+            self.controller.update_camera_settings(fps_val, res_val)
+            self.update_info_label()
+            popup.dismiss()
+
+        apply_btn.bind(on_release=on_apply)
         close_btn.bind(on_release=popup.dismiss)
         popup.open()
 

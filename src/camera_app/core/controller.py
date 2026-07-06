@@ -4,6 +4,8 @@ import re
 import sys
 import os
 from typing import Callable, Optional, List, Dict, Any
+
+# pyrefly: ignore [missing-import]
 from src.camera_app.services.config_service import ConfigService
 from src.camera_app.services.camera_service import CameraService
 from src.camera_app.services.upload_service import UploadService
@@ -87,14 +89,44 @@ class AppController:
 
     def _update_active_config(self, name: str, device: str) -> None:
         """Updates and persists the active camera config settings."""
+        fps = (
+            self.active_camera_config.get("fps", 30)
+            if self.active_camera_config
+            else 30
+        )
+        resolution = (
+            self.active_camera_config.get("resolution", "640x480")
+            if self.active_camera_config
+            else "640x480"
+        )
+
         self.active_camera_config = {
             "id": "active_cam",
             "name": name,
             "device": device,
-            "fps": 30,
-            "resolution": "640x480",
+            "fps": fps,
+            "resolution": resolution,
         }
         self.config_service.set("active_camera", self.active_camera_config)
+
+    def update_camera_settings(self, fps: int, resolution: str) -> None:
+        """Updates the FPS and resolution for the active camera and restarts the stream."""
+        if not self.active_camera_config:
+            return
+
+        logger.info(
+            f"AppController: Updating camera settings to {fps} FPS, {resolution}"
+        )
+        self.active_camera_config["fps"] = fps
+        self.active_camera_config["resolution"] = resolution
+        self.config_service.set("active_camera", self.active_camera_config)
+
+        if self.is_recording:
+            self.stop_recording()
+            self.start_recording()
+        else:
+            self.stop_preview()
+            self.start_preview()
 
     def start_preview(self) -> None:
         """Starts preview mode (no disk write, 10fps stream to UI) for the selected camera."""

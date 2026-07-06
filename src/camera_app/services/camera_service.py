@@ -86,9 +86,11 @@ class CameraWorker:
             # Record mode: output to file AND pipe rawvideo at 10fps
             os.makedirs(base_record_dir, exist_ok=True)
             timestamp: str = time.strftime("%Y%m%d-%H%M%S")
-            self.recording_path = os.path.join(
-                base_record_dir, f"{self.config['id']}_{timestamp}.mp4"
-            )
+            cam_name = self.config.get("name", "Unknown").replace(" ", "_")
+            fps_val = self.config.get("fps", 30)
+            res_val = self.config.get("resolution", "640x480")
+            filename = f"{cam_name}_Camera_{fps_val}_{res_val}_{timestamp}.mp4"
+            self.recording_path = os.path.join(base_record_dir, filename)
             cmd += [
                 "-c:v",
                 "libx264",

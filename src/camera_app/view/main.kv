@@ -29,6 +29,10 @@
                     text: 'Select Camera'
                     background_color: 0.2, 0.4, 0.6, 1
                     on_press: root.open_camera_selection_popup()
+            Label:
+                id: info_label
+                text: "Current Settings: -- FPS | -- Resolution"
+                size_hint_y: 0.3
 
         BoxLayout:
             orientation: 'vertical'
@@ -51,3 +55,7 @@
                     text: 'Detect'
                     background_color: 0.2, 0.6, 0.8, 1
                     on_press: root.show_detected_cameras()
+                Button:
+                    text: 'Settings'
+                    background_color: 0.4, 0.4, 0.4, 1
+                    on_press: root.open_settings_popup()
