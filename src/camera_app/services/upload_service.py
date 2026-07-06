@@ -7,12 +7,14 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
 class UploadService:
     """
     Background service that watches a queue for completed MP4 files
     and uploads them to a remote destination (e.g., Google Drive)
     without blocking the core application or UI.
     """
+
     def __init__(self) -> None:
         """Initializes the UploadService and its internal queue."""
         self.upload_queue: queue.Queue[Optional[str]] = queue.Queue()
@@ -53,16 +55,16 @@ class UploadService:
                 filepath: Optional[str] = self.upload_queue.get(timeout=1.0)
                 if filepath is None:
                     continue
-                
+
                 logger.info(f"[UploadService] Starting upload for {filepath}...")
-                
+
                 if not os.path.exists(filepath):
                     logger.warning(f"[UploadService] File not found: {filepath}")
                     self.upload_queue.task_done()
                     continue
 
-                time.sleep(3) 
-                
+                time.sleep(3)
+
                 logger.info(f"[UploadService] Successfully uploaded {filepath}")
                 self.upload_queue.task_done()
 

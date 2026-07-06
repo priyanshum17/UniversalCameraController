@@ -5,18 +5,22 @@ import sys
 import threading
 import logging
 from typing import Any, Callable, Dict, Optional
-from kivy.clock import Clock # Still needed here because we schedule the frame callback to UI thread
+from kivy.clock import (
+    Clock,
+)  # Still needed here because we schedule the frame callback to UI thread
 
 logger = logging.getLogger(__name__)
+
 
 class CameraWorker:
     """
     Manages a single FFmpeg subprocess for a camera.
-    
+
     This class wraps the FFmpeg binary, configuring it to capture from the
     specified device, encode to MP4, and simultaneously output a raw RGB24
     stream to stdout for the application to consume.
     """
+
     def __init__(self, config: Dict[str, Any]) -> None:
         """
         Initializes the CameraWorker.
@@ -44,10 +48,12 @@ class CameraWorker:
 
         device: str = self.config["device"]
         fps: int = self.config["fps"]
-        
+
         os.makedirs(base_record_dir, exist_ok=True)
         timestamp: str = time.strftime("%Y%m%d-%H%M%S")
-        self.recording_path = os.path.join(base_record_dir, f"{self.config['id']}_{timestamp}.mp4")
+        self.recording_path = os.path.join(
+            base_record_dir, f"{self.config['id']}_{timestamp}.mp4"
+        )
 
         input_format: str
         if sys.platform == "darwin":
@@ -60,24 +66,32 @@ class CameraWorker:
         cmd: list[str] = [
             "ffmpeg",
             "-y",
-            "-f", input_format,
-            "-framerate", str(fps),
-            "-video_size", self.config["resolution"],
-            "-i", device,
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-f", "mp4", self.recording_path,
-            "-f", "rawvideo",
-            "-pix_fmt", "rgb24",
-            "-s", self.config["resolution"],
-            "-"
+            "-f",
+            input_format,
+            "-framerate",
+            str(fps),
+            "-video_size",
+            self.config["resolution"],
+            "-i",
+            device,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-f",
+            "mp4",
+            self.recording_path,
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "-s",
+            self.config["resolution"],
+            "-",
         ]
-        
+
         self.process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            bufsize=10**8
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=10**8
         )
         logger.info(f"[{self.config['id']}] Started FFmpeg: {self.recording_path}")
 
@@ -96,13 +110,19 @@ class CameraWorker:
             return self.recording_path
         return None
 
+
 class StreamReceiver:
     """
     Reads the raw video stream from a CameraWorker in a background thread.
-    
+
     Dispatches the read frames back to the main thread via Kivy's Clock.
     """
-    def __init__(self, camera_worker: CameraWorker, on_frame_callback: Callable[[str, bytes, int, int], None]) -> None:
+
+    def __init__(
+        self,
+        camera_worker: CameraWorker,
+        on_frame_callback: Callable[[str, bytes, int, int], None],
+    ) -> None:
         """
         Initializes the StreamReceiver.
 
@@ -111,15 +131,19 @@ class StreamReceiver:
             on_frame_callback (Callable): The function to call when a full frame is received.
         """
         self.worker: CameraWorker = camera_worker
-        self.on_frame_callback: Callable[[str, bytes, int, int], None] = on_frame_callback
+        self.on_frame_callback: Callable[[str, bytes, int, int], None] = (
+            on_frame_callback
+        )
         self.running: bool = False
         self.thread: Optional[threading.Thread] = None
-        self.frame_size: int = self.worker.width * self.worker.height * 3 
+        self.frame_size: int = self.worker.width * self.worker.height * 3
 
     def start(self) -> None:
         """Starts the background thread to read from the FFmpeg stdout pipe."""
         if not self.worker.process or not self.worker.process.stdout:
-            logger.error(f"[{self.worker.config['id']}] Cannot start receiver: process not running.")
+            logger.error(
+                f"[{self.worker.config['id']}] Cannot start receiver: process not running."
+            )
             return
 
         self.running = True
@@ -135,25 +159,33 @@ class StreamReceiver:
     def _read_stream(self) -> None:
         """The internal loop that continuously reads raw frames from stdout."""
         logger.info(f"[{self.worker.config['id']}] Stream receiver thread started.")
-        while self.running and self.worker.process and self.worker.process.poll() is None:
+        while (
+            self.running and self.worker.process and self.worker.process.poll() is None
+        ):
             raw_frame: bytes = self.worker.process.stdout.read(self.frame_size)
             if len(raw_frame) != self.frame_size:
                 break
-            Clock.schedule_once(lambda dt, frame=raw_frame: self._update_texture(frame), 0)
+            Clock.schedule_once(
+                lambda dt, frame=raw_frame: self._update_texture(frame), 0
+            )
 
         logger.info(f"[{self.worker.config['id']}] Stream receiver thread stopped.")
 
     def _update_texture(self, raw_frame: bytes) -> None:
         """Forwards the frame data to the provided callback."""
-        self.on_frame_callback(self.worker.config['id'], raw_frame, self.worker.width, self.worker.height)
+        self.on_frame_callback(
+            self.worker.config["id"], raw_frame, self.worker.width, self.worker.height
+        )
+
 
 class CameraService:
     """
     Service to orchestrate CameraWorkers and Receivers.
-    
+
     Provides a high-level API to start and stop camera recordings without
     worrying about the underlying subprocesses or threads.
     """
+
     def __init__(self, config_service: Any) -> None:
         """
         Initializes the CameraService.
@@ -165,7 +197,9 @@ class CameraService:
         self.workers: Dict[str, CameraWorker] = {}
         self.receivers: Dict[str, StreamReceiver] = {}
 
-    def start_camera(self, cam_id: str, on_frame_callback: Callable[[str, bytes, int, int], None]) -> Optional[CameraWorker]:
+    def start_camera(
+        self, cam_id: str, on_frame_callback: Callable[[str, bytes, int, int], None]
+    ) -> Optional[CameraWorker]:
         """
         Starts recording and streaming for a specific camera.
 
@@ -182,11 +216,11 @@ class CameraService:
             worker = CameraWorker(cam_config)
             self.workers[cam_id] = worker
             worker.start(record_dir)
-            
+
             receiver = StreamReceiver(worker, on_frame_callback)
             self.receivers[cam_id] = receiver
             receiver.start()
-            
+
             return worker
         return None
 
@@ -203,7 +237,7 @@ class CameraService:
         receiver = self.receivers.pop(cam_id, None)
         if receiver:
             receiver.stop()
-            
+
         worker = self.workers.pop(cam_id, None)
         if worker:
             return worker.stop()

@@ -5,13 +5,15 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+
 class ConfigService:
     """
     Manages loading and saving configuration from a JSON file.
-    
+
     This service abstracts the configuration layer, allowing the backend
     to be easily swapped to Google Sheets or a database in the future.
     """
+
     def __init__(self, config_path: str = "src/camera_app/config.json") -> None:
         """
         Initializes the ConfigService.
@@ -32,13 +34,13 @@ class ConfigService:
         """
         if not os.path.exists(self.config_path):
             raise FileNotFoundError(f"Config file not found at {self.config_path}")
-        
-        with open(self.config_path, 'r') as f:
+
+        with open(self.config_path, "r") as f:
             self._config = json.load(f)
 
     def save(self) -> None:
         """Saves the current in-memory configuration back to the JSON file."""
-        with open(self.config_path, 'w') as f:
+        with open(self.config_path, "w") as f:
             json.dump(self._config, f, indent=4)
 
     def get(self, key: str, default: Any = None) -> Any:
