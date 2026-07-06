@@ -232,6 +232,11 @@ class AppController:
                 "output",
                 "tdn",
                 "pisp",
+                "cfe",
+                "csi",
+                "embedded",
+                "unicam",
+                "bcm2835",
             ]
 
             for path in sorted(glob.glob("/sys/class/video4linux/video*")):
